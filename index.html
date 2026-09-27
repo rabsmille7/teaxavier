@@ -8,8 +8,6 @@
     <script src="https://cdn.tailwindcss.com"></script>
     <!-- SQLite WebAssembly -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/sql.js/1.8.0/sql-wasm.js"></script>
-    <!-- Gerador de QR Code 2FA -->
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
     <!-- Gerador de PDF -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 </head>
@@ -28,7 +26,7 @@
 
     <main class="max-w-4xl mx-auto p-4 mt-4">
 
-        <!-- TELA DE LOGIN / CADASTRO / RESET -->
+        <!-- TELA DE LOGIN / CADASTRO / RESET SIMPLES -->
         <div id="auth-box" class="bg-white p-6 rounded-lg shadow-lg max-w-md mx-auto">
             <h2 id="auth-title" class="text-xl font-bold mb-4 text-center text-blue-900">Acesso ao Sistema</h2>
             
@@ -42,18 +40,12 @@
                     <input type="password" id="pass" required class="w-full p-2 border rounded mt-1 focus:ring-2 focus:ring-blue-500 outline-none">
                 </div>
 
-                <div id="2fa-section" class="hidden border-t pt-3">
-                    <label class="block text-sm font-medium text-blue-900">Configuração / Código 2FA</label>
-                    <div id="qrcode" class="flex justify-center my-2"></div>
-                    <input type="text" id="token2fa" placeholder="Digite o token 2FA" class="w-full p-2 border rounded mt-1">
-                </div>
-
                 <button type="submit" id="btn-submit" class="w-full bg-blue-700 hover:bg-blue-800 text-white py-2 rounded font-semibold transition">Entrar</button>
             </form>
 
             <div class="flex justify-between text-xs mt-4 border-t pt-3">
                 <button onclick="toggleMode('login')" class="text-blue-600 hover:underline">Login</button>
-                <button onclick="toggleMode('register')" class="text-blue-600 hover:underline">Criar Conta + 2FA</button>
+                <button onclick="toggleMode('register')" class="text-blue-600 hover:underline">Criar Conta</button>
                 <button onclick="toggleMode('reset')" class="text-blue-600 hover:underline">Esqueci a Senha</button>
             </div>
             <p id="auth-msg" class="text-xs text-center mt-2 font-bold"></p>
@@ -133,7 +125,7 @@
             db = new SQL.Database();
             // Criar Tabelas no SQLite
             db.run(`
-                CREATE TABLE IF NOT EXISTS usuarios (id INTEGER PRIMARY KEY AUTOINCREMENT, user TEXT UNIQUE, pass TEXT, secret2fa TEXT);
+                CREATE TABLE IF NOT EXISTS usuarios (id INTEGER PRIMARY KEY AUTOINCREMENT, user TEXT UNIQUE, pass TEXT);
                 CREATE TABLE IF NOT EXISTS protocolos (id INTEGER PRIMARY KEY AUTOINCREMENT, numero TEXT, data TEXT, cliente TEXT, extensao TEXT, descricao TEXT, status TEXT);
             `);
             document.getElementById('system-status').innerText = 'SQLite Ativo';
@@ -145,23 +137,18 @@
             authState = mode;
             const title = document.getElementById('auth-title');
             const btn = document.getElementById('btn-submit');
-            const sec2fa = document.getElementById('2fa-section');
-            document.getElementById('qrcode').innerHTML = '';
+            const msg = document.getElementById('auth-msg');
+            msg.innerText = '';
 
             if(mode === 'login') {
                 title.innerText = 'Acesso ao Sistema';
                 btn.innerText = 'Entrar';
-                sec2fa.classList.add('hidden');
             } else if(mode === 'register') {
-                title.innerText = 'Criar Conta com 2FA';
+                title.innerText = 'Criar Conta Simples';
                 btn.innerText = 'Cadastrar Usuário';
-                sec2fa.classList.remove('hidden');
-                // Gerar QR Code Simulado 2FA
-                new QRCode(document.getElementById("qrcode"), { text: "otpauth://totp/TEA_XAVIER_HELP?secret=WARLEN13362377000132", width: 128, height: 128 });
             } else if(mode === 'reset') {
                 title.innerText = 'Redefinir Senha';
                 btn.innerText = 'Atualizar Senha';
-                sec2fa.classList.add('hidden');
             }
         }
 
@@ -174,7 +161,7 @@
 
             if (authState === 'register') {
                 try {
-                    db.run("INSERT INTO usuarios (user, pass, secret2fa) VALUES (?, ?, ?)", [u, p, "WARLEN13362377000132"]);
+                    db.run("INSERT INTO usuarios (user, pass) VALUES (?, ?)", [u, p]);
                     msg.className = "text-xs text-center mt-2 font-bold text-green-600";
                     msg.innerText = "Usuário cadastrado com sucesso! Faça login.";
                     toggleMode('login');
@@ -276,10 +263,10 @@
             const splitDesc = doc.splitTextToSize(descricao, 180);
             doc.text(splitDesc, 10, 68);
 
-            // Opção para salvar ou acionar envio por e-mail
+            // Salva o PDF
             doc.save(`Protocolo_${numero}.pdf`);
             
-            // Abre o cliente de e-mail padrão configurado para envio em via e-mail
+            // Link para acionar envio por e-mail
             const mailtoLink = `mailto:?subject=Protocolo%20${numero}%20-%20Warlen%20ME&body=Segue%20registro%20do%20protocolo%20${numero}%20referente%20ao%20atendimento%20de%20${encodeURIComponent(cliente)}.`;
             window.location.href = mailtoLink;
         }
