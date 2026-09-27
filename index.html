@@ -1,0 +1,295 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>TEA XAVIER HELP - Warlen ME</title>
+    <!-- Tailwind CSS para Interface -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- SQLite WebAssembly -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/sql.js/1.8.0/sql-wasm.js"></script>
+    <!-- Gerador de QR Code 2FA -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+    <!-- Gerador de PDF -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+</head>
+<body class="bg-slate-100 min-h-screen text-slate-800 font-sans">
+
+    <!-- CABEÇALHO EMPRESARIAL -->
+    <header class="bg-blue-900 text-white p-4 shadow-md">
+        <div class="max-w-4xl mx-auto flex justify-between items-center">
+            <div>
+                <h1 class="text-2xl font-bold tracking-wide">TEA XAVIER HELP</h1>
+                <p class="text-xs text-blue-200">Warlen ME | CNPJ: 13.362.377/0001-32</p>
+            </div>
+            <span id="system-status" class="text-xs bg-yellow-500 text-black px-2 py-1 rounded">Carregando SQLite...</span>
+        </div>
+    </header>
+
+    <main class="max-w-4xl mx-auto p-4 mt-4">
+
+        <!-- TELA DE LOGIN / CADASTRO / RESET -->
+        <div id="auth-box" class="bg-white p-6 rounded-lg shadow-lg max-w-md mx-auto">
+            <h2 id="auth-title" class="text-xl font-bold mb-4 text-center text-blue-900">Acesso ao Sistema</h2>
+            
+            <form id="auth-form" class="space-y-4" onsubmit="handleAuth(event)">
+                <div>
+                    <label class="block text-sm font-medium">Usuário</label>
+                    <input type="text" id="user" required class="w-full p-2 border rounded mt-1 focus:ring-2 focus:ring-blue-500 outline-none">
+                </div>
+                <div>
+                    <label class="block text-sm font-medium">Senha</label>
+                    <input type="password" id="pass" required class="w-full p-2 border rounded mt-1 focus:ring-2 focus:ring-blue-500 outline-none">
+                </div>
+
+                <div id="2fa-section" class="hidden border-t pt-3">
+                    <label class="block text-sm font-medium text-blue-900">Configuração / Código 2FA</label>
+                    <div id="qrcode" class="flex justify-center my-2"></div>
+                    <input type="text" id="token2fa" placeholder="Digite o token 2FA" class="w-full p-2 border rounded mt-1">
+                </div>
+
+                <button type="submit" id="btn-submit" class="w-full bg-blue-700 hover:bg-blue-800 text-white py-2 rounded font-semibold transition">Entrar</button>
+            </form>
+
+            <div class="flex justify-between text-xs mt-4 border-t pt-3">
+                <button onclick="toggleMode('login')" class="text-blue-600 hover:underline">Login</button>
+                <button onclick="toggleMode('register')" class="text-blue-600 hover:underline">Criar Conta + 2FA</button>
+                <button onclick="toggleMode('reset')" class="text-blue-600 hover:underline">Esqueci a Senha</button>
+            </div>
+            <p id="auth-msg" class="text-xs text-center mt-2 font-bold"></p>
+        </div>
+
+        <!-- PAINEL PRINCIPAL (APÓS LOGIN) -->
+        <div id="app-box" class="hidden space-y-6">
+            
+            <!-- FORMULÁRIO DE PROTOCOLO E ANEXO -->
+            <div class="bg-white p-6 rounded-lg shadow-md">
+                <div class="flex justify-between items-center mb-4">
+                    <h3 class="text-lg font-bold text-blue-900">Registro de Atendimento e Mídia</h3>
+                    <button onclick="logout()" class="text-xs bg-red-600 text-white px-3 py-1 rounded">Sair</button>
+                </div>
+
+                <form id="protocol-form" onsubmit="salvarProtocolo(event)" class="space-y-4">
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div>
+                            <label class="block text-sm font-medium">Nome do Cliente / Paciente</label>
+                            <input type="text" id="cliente" required class="w-full p-2 border rounded">
+                        </div>
+                        <div>
+                            <label class="block text-sm font-medium">Extensão da Mídia (.pdf, .txt, .mp3, .mp4, .avi, .doc)</label>
+                            <select id="extensao" required class="w-full p-2 border rounded">
+                                <option value=".pdf">PDF Document (.pdf)</option>
+                                <option value=".txt">Texto Simples (.txt)</option>
+                                <option value=".mp3">Áudio MP3 (.mp3)</option>
+                                <option value=".mp4">Vídeo MP4 (.mp4)</option>
+                                <option value=".avi">Vídeo AVI (.avi)</option>
+                                <option value=".doc">Documento Word (.doc)</option>
+                            </select>
+                        </div>
+                    </div>
+
+                    <div>
+                        <label class="block text-sm font-medium">Descrição Detalhada do Atendimento</label>
+                        <textarea id="descricao" rows="3" required class="w-full p-2 border rounded" placeholder="Digite todo o histórico de atendimento..."></textarea>
+                    </div>
+
+                    <div class="flex gap-2">
+                        <button type="submit" class="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded font-semibold">Gravar Registro</button>
+                    </div>
+                </form>
+            </div>
+
+            <!-- REGISTROS E PROTOCOLOS GRAVADOS NO SQLITE -->
+            <div class="bg-white p-6 rounded-lg shadow-md">
+                <h3 class="text-lg font-bold text-blue-900 mb-4">Protocolos Ativos (SQLite Engine)</h3>
+                <div class="overflow-x-auto">
+                    <table class="w-full text-left text-xs border-collapse">
+                        <thead>
+                            <tr class="bg-slate-200">
+                                <th class="p-2 border">Protocolo</th>
+                                <th class="p-2 border">Data</th>
+                                <th class="p-2 border">Cliente</th>
+                                <th class="p-2 border">Extensão</th>
+                                <th class="p-2 border">Descrição</th>
+                                <th class="p-2 border">Status</th>
+                                <th class="p-2 border">Ações</th>
+                            </tr>
+                        </thead>
+                        <tbody id="tabela-protocolos"></tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+    </main>
+
+    <script>
+        let db = null;
+        let authState = 'login'; // login, register, reset
+        let currentUser = null;
+
+        // INICIALIZAR SQLITE EM WEB ASSEMBLY
+        initSqlJs({ locateFile: file => `https://cdnjs.cloudflare.com/ajax/libs/sql.js/1.8.0/${file}` }).then(SQL => {
+            db = new SQL.Database();
+            // Criar Tabelas no SQLite
+            db.run(`
+                CREATE TABLE IF NOT EXISTS usuarios (id INTEGER PRIMARY KEY AUTOINCREMENT, user TEXT UNIQUE, pass TEXT, secret2fa TEXT);
+                CREATE TABLE IF NOT EXISTS protocolos (id INTEGER PRIMARY KEY AUTOINCREMENT, numero TEXT, data TEXT, cliente TEXT, extensao TEXT, descricao TEXT, status TEXT);
+            `);
+            document.getElementById('system-status').innerText = 'SQLite Ativo';
+            document.getElementById('system-status').className = 'text-xs bg-green-500 text-white px-2 py-1 rounded';
+        });
+
+        // ALTERAR MODO DE AUTENTICAÇÃO
+        function toggleMode(mode) {
+            authState = mode;
+            const title = document.getElementById('auth-title');
+            const btn = document.getElementById('btn-submit');
+            const sec2fa = document.getElementById('2fa-section');
+            document.getElementById('qrcode').innerHTML = '';
+
+            if(mode === 'login') {
+                title.innerText = 'Acesso ao Sistema';
+                btn.innerText = 'Entrar';
+                sec2fa.classList.add('hidden');
+            } else if(mode === 'register') {
+                title.innerText = 'Criar Conta com 2FA';
+                btn.innerText = 'Cadastrar Usuário';
+                sec2fa.classList.remove('hidden');
+                // Gerar QR Code Simulado 2FA
+                new QRCode(document.getElementById("qrcode"), { text: "otpauth://totp/TEA_XAVIER_HELP?secret=WARLEN13362377000132", width: 128, height: 128 });
+            } else if(mode === 'reset') {
+                title.innerText = 'Redefinir Senha';
+                btn.innerText = 'Atualizar Senha';
+                sec2fa.classList.add('hidden');
+            }
+        }
+
+        // LÓGICA DE AUTENTICAÇÃO E USUÁRIOS NO SQLITE
+        function handleAuth(e) {
+            e.preventDefault();
+            const u = document.getElementById('user').value;
+            const p = document.getElementById('pass').value;
+            const msg = document.getElementById('auth-msg');
+
+            if (authState === 'register') {
+                try {
+                    db.run("INSERT INTO usuarios (user, pass, secret2fa) VALUES (?, ?, ?)", [u, p, "WARLEN13362377000132"]);
+                    msg.className = "text-xs text-center mt-2 font-bold text-green-600";
+                    msg.innerText = "Usuário cadastrado com sucesso! Faça login.";
+                    toggleMode('login');
+                } catch(err) {
+                    msg.className = "text-xs text-center mt-2 font-bold text-red-600";
+                    msg.innerText = "Erro: Usuário já existe.";
+                }
+            } else if (authState === 'login') {
+                const res = db.exec("SELECT * FROM usuarios WHERE user = ? AND pass = ?", [u, p]);
+                if (res.length > 0 && res[0].values.length > 0) {
+                    currentUser = u;
+                    document.getElementById('auth-box').classList.add('hidden');
+                    document.getElementById('app-box').classList.remove('hidden');
+                    carregarProtocolos();
+                } else {
+                    msg.className = "text-xs text-center mt-2 font-bold text-red-600";
+                    msg.innerText = "Usuário ou senha incorretos!";
+                }
+            } else if (authState === 'reset') {
+                db.run("UPDATE usuarios SET pass = ? WHERE user = ?", [p, u]);
+                msg.className = "text-xs text-center mt-2 font-bold text-green-600";
+                msg.innerText = "Senha redefinida com sucesso!";
+                toggleMode('login');
+            }
+        }
+
+        // GERAR PROTOCOLO E SALVAR NO SQLITE
+        function salvarProtocolo(e) {
+            e.preventDefault();
+            const cliente = document.getElementById('cliente').value;
+            const extensao = document.getElementById('extensao').value;
+            const descricao = document.getElementById('descricao').value;
+            const protocolo = 'TEA-' + Math.floor(100000 + Math.random() * 900000);
+            const dataHora = new Date().toLocaleString('pt-BR');
+
+            db.run("INSERT INTO protocolos (numero, data, cliente, extensao, descricao, status) VALUES (?, ?, ?, ?, ?, ?)", 
+                [protocolo, dataHora, cliente, extensao, descricao, 'ATIVO']);
+
+            document.getElementById('protocol-form').reset();
+            carregarProtocolos();
+        }
+
+        // CARREGAR TABELA DE PROTOCOLOS
+        function carregarProtocolos() {
+            const tbody = document.getElementById('tabela-protocolos');
+            tbody.innerHTML = '';
+            const res = db.exec("SELECT * FROM protocolos ORDER BY id DESC");
+
+            if(res.length > 0) {
+                res[0].values.forEach(row => {
+                    const [id, numero, data, cliente, extensao, descricao, status] = row;
+                    const tr = document.createElement('tr');
+                    tr.className = status === 'CANCELADO' ? 'bg-red-50 text-red-600 line-through' : 'border-b';
+                    tr.innerHTML = `
+                        <td class="p-2 border font-bold">${numero}</td>
+                        <td class="p-2 border">${data}</td>
+                        <td class="p-2 border">${cliente}</td>
+                        <td class="p-2 border"><span class="bg-blue-100 text-blue-800 px-1 rounded">${extensao}</span></td>
+                        <td class="p-2 border">${descricao}</td>
+                        <td class="p-2 border font-semibold">${status}</td>
+                        <td class="p-2 border space-x-1">
+                            ${status === 'ATIVO' ? `
+                                <button onclick="gerarPDF('${numero}', '${data}', '${cliente}', '${extensao}', '${descricao}')" class="bg-blue-600 text-white px-2 py-1 rounded text-xs">PDF/E-mail</button>
+                                <button onclick="recuarCancelar('${numero}')" class="bg-amber-600 text-white px-2 py-1 rounded text-xs">Cancelar</button>
+                            ` : 'Sem Ações'}
+                        </td>
+                    `;
+                    tbody.appendChild(tr);
+                });
+            }
+        }
+
+        // RECUAR E CANCELAR REGISTRO NO BANCO SQLITE
+        function recuarCancelar(numero) {
+            if(confirm(`Deseja realmente recuar e cancelar o protocolo ${numero}?`)) {
+                db.run("UPDATE protocolos SET status = 'CANCELADO' WHERE numero = ?", [numero]);
+                carregarProtocolos();
+            }
+        }
+
+        // GERAR RELATÓRIO PDF COM DADOS EMPRESARIAIS
+        function gerarPDF(numero, data, cliente, extensao, descricao) {
+            const { jsPDF } = window.jspdf;
+            const doc = new jsPDF();
+
+            doc.setFontSize(16);
+            doc.text("Warlen ME - CNPJ: 13.362.377/0001-32", 10, 15);
+            doc.setFontSize(12);
+            doc.text("Módulo: TEA XAVIER HELP", 10, 23);
+            doc.text("------------------------------------------------------------------", 10, 28);
+
+            doc.setFontSize(10);
+            doc.text(`PROTOCOLO DE ATENDIMENTO: ${numero}`, 10, 36);
+            doc.text(`Data/Hora: ${data}`, 10, 42);
+            doc.text(`Cliente: ${cliente}`, 10, 48);
+            doc.text(`Tipo de Arquivo Anexo: ${extensao}`, 10, 54);
+            doc.text(`Histórico / Registro:`, 10, 62);
+            
+            const splitDesc = doc.splitTextToSize(descricao, 180);
+            doc.text(splitDesc, 10, 68);
+
+            // Opção para salvar ou acionar envio por e-mail
+            doc.save(`Protocolo_${numero}.pdf`);
+            
+            // Abre o cliente de e-mail padrão configurado para envio em via e-mail
+            const mailtoLink = `mailto:?subject=Protocolo%20${numero}%20-%20Warlen%20ME&body=Segue%20registro%20do%20protocolo%20${numero}%20referente%20ao%20atendimento%20de%20${encodeURIComponent(cliente)}.`;
+            window.location.href = mailtoLink;
+        }
+
+        function logout() {
+            document.getElementById('app-box').classList.add('hidden');
+            document.getElementById('auth-box').classList.remove('hidden');
+            document.getElementById('auth-form').reset();
+            currentUser = null;
+        }
+    </script>
+</body>
+</html>
